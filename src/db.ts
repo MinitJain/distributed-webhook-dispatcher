@@ -12,6 +12,15 @@ export type JobRow = {
   next_attempt_at: number;
 };
 
+export type AttemptRow = {
+  attempt: number;
+  status: string;
+  status_code: number | null;
+  error: string | null;
+  duration_ms: number;
+  created_at: number;
+};
+
 export type NewJob = {
   id: string;
   destinationUrl: string;
@@ -74,8 +83,8 @@ export function openDb(path: string) {
     markDelivering: (id: string, now: number) => markDelivering.run(now, id),
     finishJob: (j: { id: string; status: string; attempts: number; nextAt: number; now: number }) =>
       finish.run(j.status, j.attempts, j.nextAt, j.now, j.id),
-    getJob: (id: string) => getJob.get(id) as Record<string, unknown> | undefined,
-    getAttempts: (id: string) => getAttempts.all(id) as Record<string, unknown>[],
+    getJob: (id: string) => getJob.get(id) as JobRow | undefined,
+    getAttempts: (id: string) => getAttempts.all(id) as AttemptRow[],
     logAttempt: (a: { jobId: string; attempt: number; status: string; statusCode: number | null; error: string | null; durationMs: number; now: number }) =>
       logAttempt.run(a.jobId, a.attempt, a.status, a.statusCode, a.error, a.durationMs, a.now),
 
