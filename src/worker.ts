@@ -34,7 +34,7 @@ export function decide(code: number | null, permanent: boolean, attempt: number,
     return { attemptStatus: 'success', jobStatus: 'succeeded', nextAt: now } as const;
 
   // code === null means a network error or timeout. Those are worth retrying.
-  const retryable = !permanent && (code === null || code === 429 || code >= 500);
+  const retryable = !permanent && (code === null || code === 408 || code === 429 || code >= 500);
   if (retryable && attempt < MAX_ATTEMPTS)
     return { attemptStatus: 'retrying', jobStatus: 'queued', nextAt: now + baseMs * 2 ** (attempt - 1) } as const; // 2s, 4s, 8s
 
