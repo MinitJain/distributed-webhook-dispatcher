@@ -8,9 +8,25 @@ type WorkerOptions = {
   timeoutMs?: number;
   allowPrivate?: boolean;
   baseBackoffMs?: number;
+  ratePerSec?: number;
 };
 
 const MAX_ATTEMPTS = 4; // 1 try + 3 retries
+
+// Token bucket per destination host. Starts full (burst = ratePerSec), refills ratePerSec tokens per second.
+// Each send takes one token. No token = the job waits in the queue and is checked again next tick.
+export function makeTokenBuckets(ratePerSec: number) {
+  const buckets = new Map<string, { tokens: number; last: number }>();
+  return (host: string, now = Date.now()): boolean => {
+    const b = buckets.get(host) ?? { tokens: ratePerSec, last: now };
+    b.tokens = Math.min(ratePerSec, b.tokens + ((now - b.last) / 1000) * ratePerSec);
+    b.last = now;
+    buckets.set(host, b);
+    if (b.tokens < 1) return false;
+    b.tokens -= 1;
+    return true;
+  };
+}
 
 // Pure decision: what to do after one try. Easy to test on its own.
 export function decide(code: number | null, permanent: boolean, attempt: number, baseMs: number, now: number) {
@@ -31,10 +47,13 @@ export function startWorker(db: Db, opts: WorkerOptions = {}) {
   const timeoutMs = opts.timeoutMs ?? 10_000;
   const allowPrivate = opts.allowPrivate ?? false;
   const baseBackoffMs = opts.baseBackoffMs ?? 2_000;
+  const takeToken = makeTokenBuckets(opts.ratePerSec ?? 5);
 
   const timer = setInterval(() => {
     const now = Date.now();
     for (const job of db.dueJobs(now)) {
+      // shortcut: one busy host can push other jobs past the LIMIT 50 window, use per-host queues to fix
+      if (!takeToken(new URL(job.destination_url).host, now)) continue; // over the limit: wait for next tick
       db.markDelivering(job.id, now);
       // Not awaited: one slow client must not hold up the other jobs.
       deliver(db, job, { timeoutMs, allowPrivate, baseBackoffMs }).catch((err) => console.error('delivery crashed', job.id, err));
