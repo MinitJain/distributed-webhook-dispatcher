@@ -2,6 +2,16 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
+export type JobRow = {
+  id: string;
+  destination_url: string;
+  event_id: string;
+  payload: string; // JSON text
+  status: string;
+  attempts: number;
+  next_attempt_at: number;
+};
+
 export type NewJob = {
   id: string;
   destinationUrl: string;
@@ -54,7 +64,16 @@ export function openDb(path: string) {
     (job_id, attempt, status, status_code, error, duration_ms, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?)`);
 
+  const due = db.prepare(`SELECT * FROM jobs WHERE status = 'queued' AND next_attempt_at <= ?
+    ORDER BY next_attempt_at LIMIT 50`);
+  const markDelivering = db.prepare("UPDATE jobs SET status = 'delivering', updated_at = ? WHERE id = ?");
+  const finish = db.prepare('UPDATE jobs SET status = ?, attempts = ?, next_attempt_at = ?, updated_at = ? WHERE id = ?');
+
   return {
+    dueJobs: (now: number) => due.all(now) as JobRow[],
+    markDelivering: (id: string, now: number) => markDelivering.run(now, id),
+    finishJob: (j: { id: string; status: string; attempts: number; nextAt: number; now: number }) =>
+      finish.run(j.status, j.attempts, j.nextAt, j.now, j.id),
     getJob: (id: string) => getJob.get(id) as Record<string, unknown> | undefined,
     getAttempts: (id: string) => getAttempts.all(id) as Record<string, unknown>[],
     logAttempt: (a: { jobId: string; attempt: number; status: string; statusCode: number | null; error: string | null; durationMs: number; now: number }) =>

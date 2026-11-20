@@ -2,12 +2,14 @@ import express from 'express';
 import { randomUUID } from 'node:crypto';
 import { openDb } from './db.js';
 import { validateDispatch } from './validate.js';
+import { startWorker } from './worker.js';
 
 const app = express();
 app.use(express.json({ limit: '100kb' }));
 
 const db = openDb(process.env.DB_PATH || './data/dispatcher.db');
 const allowPrivate = process.env.ALLOW_PRIVATE_DESTINATIONS === '1'; // local testing only
+startWorker(db, { allowPrivate });
 
 app.get('/health', (_req, res) => {
   res.status(200).json({ ok: true });
