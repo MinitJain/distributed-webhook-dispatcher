@@ -11,6 +11,19 @@ const db = openDb(process.env.DB_PATH || './data/dispatcher.db');
 const allowPrivate = process.env.ALLOW_PRIVATE_DESTINATIONS === '1'; // local testing only
 startWorker(db, { allowPrivate });
 
+// Root: lists the endpoints so the live site isn't a bare "Cannot GET /".
+app.get('/', (_req, res) => {
+  res.json({
+    service: 'distributed-webhook-dispatcher',
+    endpoints: [
+      'GET /health',
+      'POST /api/webhooks/dispatch',
+      'GET /api/webhooks/jobs/:id',
+      'GET|POST /api/mock/:code?delayMs=N',
+    ],
+  });
+});
+
 app.get('/health', (_req, res) => {
   res.status(200).json({ ok: true });
 });
